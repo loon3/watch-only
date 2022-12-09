@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   env: {
-    COUNTERPARTY_API_URL: "http://public.coindaddy.io:4000/api/",
+    COUNTERPARTY_API_URL: "https://public.coindaddy.io:4001/api/",
   }
 }
 
