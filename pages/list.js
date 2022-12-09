@@ -23,8 +23,8 @@ export async function getServerSideProps(context) {
     const filters = [{field: 'address', op: 'IN', value: address}, {field: 'asset', op: '!=', value: 'XCP'}]
 
     const options = getOptions(filters, 'get_balances', 0)
-
-    const res = await fetch('http://public.coindaddy.io:4000/api/', options)
+    
+    const res = await fetch(process.env.COUNTERPARTY_API_URL, options)
     const data = await res.json()
 
     if (data.result.length == 1000) {
@@ -32,7 +32,7 @@ export async function getServerSideProps(context) {
         let moreData = true
         while (moreData) {
             const options = getOptions(filters, 'get_balances', offset)
-            const res = await fetch('http://public.coindaddy.io:4000/api/', options)
+            const res = await fetch(process.env.COUNTERPARTY_API_URL, options)
             const data2 = await res.json()
             data.result = data.result.concat(data2.result)
             if (data2.result.length < 1000) {
@@ -105,7 +105,7 @@ async function fetchIssuances(assetArray) {
     const filters = [{field: 'asset', op: 'IN', value: assetArray}, {field: 'status', op: '==', value: 'valid'}]
     const options = getOptions(filters, 'get_issuances', 0)
 
-    const res = await fetch('http://public.coindaddy.io:4000/api/', options)
+    const res = await fetch(process.env.COUNTERPARTY_API_URL, options)
     const data = await res.json()
 
     //if data.result.length is 1000 then there are more results and we need to fetch again until we get less than 1000 and then return the data
@@ -114,7 +114,7 @@ async function fetchIssuances(assetArray) {
         let moreData = true
         while (moreData) {
             const options = getOptions(filters, 'get_issuances', offset)
-            const res = await fetch('http://public.coindaddy.io:4000/api/', options)
+            const res = await fetch(process.env.COUNTERPARTY_API_URL, options)
             const data2 = await res.json()
             data.result = data.result.concat(data2.result)
             if (data2.result.length < 1000) {
