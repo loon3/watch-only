@@ -131,6 +131,8 @@ async function fetchIssuances(assetArray) {
 
 export default function Home({balances, addresses}) {
 
+    console.log(balances)
+
     useEffect(() => {
         async function fetchData() {
 
@@ -162,6 +164,17 @@ export default function Home({balances, addresses}) {
                 item.locked = assetInfoObj[item.asset][item.issuances.length-1].locked
                 item.issuer = assetInfoObj[item.asset][item.issuances.length-1].issuer
                 item.block_index = assetInfoObj[item.asset][0].block_index
+
+                //calculate the total quantity of the asset from the issuances
+                let totalQuantity = 0
+                assetInfoObj[item.asset].forEach((issuance) => {
+                    totalQuantity += issuance.quantity
+                })
+                item.supply = totalQuantity
+                if(item.divisible == 1) {
+                    item.supply = item.supply / 1e8
+                }
+
                 return item
             })
 
@@ -221,17 +234,11 @@ export default function Home({balances, addresses}) {
     }
 
     const filterHideUnlocked = (data) => {
-        //ignore elements with no issuances
         const filteredData = data.filter((item) => {
-            return item.issuances
+            return checkLocked(item.issuances)
         }
         )
-
-        const filteredData2 = filteredData.filter((item) => {
-            return getLastElement(item.issuances).locked == 1
-        }
-        )
-        setStateData(filteredData2)
+        setStateData(filteredData)
         setFiltersApplied((filtersApplied) => ({...filtersApplied, hideUnlocked: true}))
     }
 
@@ -376,6 +383,7 @@ function DataTable(stateData, addresses, sortDataAscByKey, sortDataDescByKey, so
                 <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("asset", "string")}>Asset {sortingApplied.asset ? (sortingApplied.asset == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
                 <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("description", "string")}>Description {sortingApplied.description ? (sortingApplied.description == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
                 <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("quantity", "number")}>Quantity {sortingApplied.quantity ? (sortingApplied.quantity == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("supply", "number")}>Supply {sortingApplied.supply ? (sortingApplied.supply == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
                 <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("divisible", "number")}>Divisible {sortingApplied.divisible ? (sortingApplied.divisible == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
                 <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("locked", "number")}>Locked {sortingApplied.locked ? (sortingApplied.locked == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
                 <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("block_index", "number")}>Issuance Block {sortingApplied.block_index ? (sortingApplied.block_index == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
@@ -391,6 +399,7 @@ function DataTable(stateData, addresses, sortDataAscByKey, sortDataDescByKey, so
                         <td className={styles.tableElement}>{item.asset}</td>
                         <td className={styles.tableElement}>{item.description}</td>
                         <td className={styles.tableElement}>{item.quantity}</td>
+                        <td className={styles.tableElement}>{item.supply}</td>
                         <td className={styles.tableElement}>{item.divisible == 1 ? "true" : "false"}</td>
                         <td className={styles.tableElement}>{item.issuances ? (checkLocked(item.issuances) ? "true" : "false") : "..."}</td>
                         <td className={styles.tableElement}>{item.issuances ? (item.issuances[0].block_index) : "..."}</td>
