@@ -61,6 +61,16 @@ export async function getServerSideProps(context) {
 
 function getOptions(filters, method, offset) {
 
+    let params = {
+        filters,
+        filterop: 'and',
+        offset: offset
+    }
+
+    if(!filters) {
+        params = {}
+    }
+
     const options = {
     method: 'POST',
     headers: {
@@ -72,11 +82,7 @@ function getOptions(filters, method, offset) {
         jsonrpc: '2.0',
         id: 0,
         method: method,
-        params: {
-        filters,
-        filterop: 'and',
-        offset: offset
-        }
+        params: params
     }),
     };
 
@@ -129,6 +135,14 @@ async function fetchIssuances(assetArray) {
 
 }
 
+async function fetchBlockHeight() {
+    const options = getOptions(null, 'get_running_info', 0)
+    const res = await fetch(process.env.COUNTERPARTY_API_URL, options)
+    const data = await res.json()
+    console.log(data)
+    return data.result.last_block.block_index
+}
+
 export default function Home({balances, addresses}) {
 
     console.log(balances)
@@ -164,6 +178,8 @@ export default function Home({balances, addresses}) {
                 item.locked = assetInfoObj[item.asset][item.issuances.length-1].locked
                 item.issuer = assetInfoObj[item.asset][item.issuances.length-1].issuer
                 item.block_index = assetInfoObj[item.asset][0].block_index
+                item.asset_longname = assetInfoObj[item.asset][0].asset_longname
+                item.assetForSorting = item.asset_longname ? item.asset_longname : item.asset
 
                 //calculate the total quantity of the asset from the issuances
                 let totalQuantity = 0
@@ -178,16 +194,19 @@ export default function Home({balances, addresses}) {
                 return item
             })
 
+            const blockHeight = await fetchBlockHeight()
+
+            setBlockHeight(blockHeight)
             setStateData(balancesWithIssuances)
-        }
-        fetchData()
+          }
+        fetchData()   
     }, [])
 
     //console.log(balances)
 
     const clearFilters = (data) => {
         setStateData((data) => [...balances])
-        setFiltersApplied({hideUnlocked: false, hideDivisible: false, hideNumericAssets: false})
+        setFiltersApplied({hideUnlocked: false, hideDivisible: false, hideNumericAssets: false, hideSubassets: false})
     }
     
     const sortDataAscByKey = (data, key) => {
@@ -224,6 +243,11 @@ export default function Home({balances, addresses}) {
     
     const filterHideNumericAssets = (data) => {
         const filteredData = data.filter((item) => {
+
+            if(item.asset_longname) {
+                return true
+            }
+
             return !item.asset.startsWith("A")
         }
 
@@ -231,6 +255,14 @@ export default function Home({balances, addresses}) {
         setStateData(filteredData)
         setFiltersApplied((filtersApplied) => ({...filtersApplied, hideNumericAssets: true}))
 
+    }
+
+    const filterHideSubassets = (data) => {
+        const filteredData = data.filter((item) => {
+            return !item.asset_longname
+        })
+        setStateData(filteredData)
+        setFiltersApplied((filtersApplied) => ({...filtersApplied, hideSubassets: true}))
     }
 
     const filterHideUnlocked = (data) => {
@@ -252,13 +284,14 @@ export default function Home({balances, addresses}) {
     }
 
     const [stateData, setStateData] = useState(balances)
-    const [filtersApplied, setFiltersApplied] = useState({hideUnlocked: false, hideDivisible: false, hideNumericAssets: false})
+    const [blockHeight, setBlockHeight] = useState("...")
+    const [filtersApplied, setFiltersApplied] = useState({hideUnlocked: false, hideDivisible: false, hideNumericAssets: false, hideSubassets: false})
+    
     
     return (
-
-
         <div className={styles.container}>
-            <h1 className={styles.centered}>Address(es):</h1>
+            <p className={styles.blockHeading}>Last Block: {blockHeight}</p>
+            <div className="text-3xl font-bold w-full text-center">Address(es):</div>
             {addresses.map(
                 (address, index) => {
                     return (
@@ -266,10 +299,10 @@ export default function Home({balances, addresses}) {
                     )
                 }
             )}
-            <h1 className={styles.totalAssetCount}>List Count: {getAssetCount(stateData) == 0 ? (<span>...</span>):(getAssetCount(stateData))}</h1>
+            <div className="text-xl font-bold w-full text-center py-4">List Count: {getAssetCount(stateData) == 0 ? (<span>...</span>):(getAssetCount(stateData))}</div>
             <div className={styles.listInfo}>Assets owned by collection addresses are <span className={styles.highlightRow}>highlighted in green</span></div>
             <div className={styles.centered}>
-                {sortFilterButtons(stateData, filtersApplied, filterHideNumericAssets, filterHideUnlocked, filterHideDivisible)}
+                {sortFilterButtons(stateData, filtersApplied, filterHideNumericAssets, filterHideUnlocked, filterHideDivisible, filterHideSubassets)}
                 <ShowFiltersApplied filtersApplied={filtersApplied} />
                 <button id="clearFiltersButton" className={allFalse(filtersApplied) ? styles.hideButton:styles.formButton} onClick={() => clearFilters(stateData)}>Clear Filters</button>
                 {DataTable(stateData, addresses, sortDataAscByKey, sortDataDescByKey, sortDataAscByKeyString, sortDataDescByKeyString)} 
@@ -317,7 +350,8 @@ function ShowFiltersApplied({filtersApplied}) {
         <>
             {allFalse(filtersApplied) ? null : (
             <div className={styles.filtersApplied}>
-                <h3>Filters Applied:</h3>
+                <div className="text-xl font-bold w-full text-center pb-2">Filters Applied:</div>
+                {filtersApplied.hideSubassets ? <p>Hide Subassets</p> : null}
                 {filtersApplied.hideUnlocked ? <p>Hide Unlocked</p> : null}
                 {filtersApplied.hideDivisible ? <p>Hide Divisible</p> : null}
                 {filtersApplied.hideNumericAssets ? <p>Hide Numeric Assets</p> : null}
@@ -328,10 +362,11 @@ function ShowFiltersApplied({filtersApplied}) {
 
 }
 
-function sortFilterButtons(stateData, filtersApplied, filterHideNumericAssets, filterHideUnlocked, filterHideDivisible) {
+function sortFilterButtons(stateData, filtersApplied, filterHideNumericAssets, filterHideUnlocked, filterHideDivisible, filterHideSubassets) {
     return <div className={styles.sortButtons}>
         <div>
             <button id="filterHideNumericAssetsButton" className={filtersApplied.hideNumericAssets ? styles.hideButton:styles.formButton} onClick={() => filterHideNumericAssets(stateData)}>Hide Numeric Assets</button>
+            <button id="filterHideSubassetsButton" className={filtersApplied.hideSubassets ? styles.hideButton:styles.formButton} onClick={() => filterHideSubassets(stateData)}>Hide Subassets</button>
             <button id="filterHideUnlockedButton" className={filtersApplied.hideUnlocked ? styles.hideButton:styles.formButton} onClick={() => filterHideUnlocked(stateData)}>Hide Unlocked</button>
             <button id="filterHideDivisibleButton" className={filtersApplied.hideDivisible ? styles.hideButton:styles.formButton} onClick={() => filterHideDivisible(stateData)}>Hide Divisible</button>
         </div>
@@ -352,42 +387,42 @@ function checkIfZeroQtyAndNotIssued(element, addresses) {
 
 function DataTable(stateData, addresses, sortDataAscByKey, sortDataDescByKey, sortDataAscByKeyString, sortDataDescByKeyString) {
 
-    const [sortingApplied, setSortingApplied] = useState({address: null, asset: null, description: null, quantity: null, divisible: null, locked: null, block_index: null, issuer: null})
+    const [sortingApplied, setSortingApplied] = useState({param: null, type: null})
 
     function handleHeaderElementClick(element, type) {
 
-        if(sortingApplied[element] == "desc" || sortingApplied[element] == null) {
+        if(sortingApplied.type == "desc" || sortingApplied.type == null) {
 
             if(type == "number") {
                 sortDataAscByKey(stateData, element)
             } else if(type == "string") {
                 sortDataAscByKeyString(stateData, element)
             }
-            setSortingApplied({[element]: "asc"})
+            setSortingApplied({type: "asc", param: element})
 
-        } else if(sortingApplied[element] == "asc") {
+        } else if(sortingApplied.type == "asc") {
                 
             if(type == "number") {
                 sortDataDescByKey(stateData, element)  
             } else if(type == "string") {
                 sortDataDescByKeyString(stateData, element)
             }
-            setSortingApplied({[element]: "desc"})
+            setSortingApplied({type: "desc", param: element})
 
         }
     }
     return <table className={styles.table}>
         <thead className={styles.stickyHeader}>
             <tr>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("address", "string")}>Address {sortingApplied.address ? (sortingApplied.address == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("asset", "string")}>Asset {sortingApplied.asset ? (sortingApplied.asset == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("description", "string")}>Description {sortingApplied.description ? (sortingApplied.description == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("quantity", "number")}>Quantity {sortingApplied.quantity ? (sortingApplied.quantity == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("supply", "number")}>Supply {sortingApplied.supply ? (sortingApplied.supply == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("divisible", "number")}>Divisible {sortingApplied.divisible ? (sortingApplied.divisible == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("locked", "number")}>Locked {sortingApplied.locked ? (sortingApplied.locked == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("block_index", "number")}>Issuance Block {sortingApplied.block_index ? (sortingApplied.block_index == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
-                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("issuer", "string")}>Asset Owner {sortingApplied.issuer ? (sortingApplied.issuer == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("address", "string")}>Address {sortingApplied.param == "address" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("assetForSorting", "string")}>Asset {sortingApplied.param == "assetForSorting" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("description", "string")}>Description {sortingApplied.param == "description" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("quantity", "number")}>Quantity {sortingApplied.param == "quantity" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("supply", "number")}>Supply {sortingApplied.param == "supply" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("divisible", "number")}>Divisible {sortingApplied.param == "divisible" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("locked", "number")}>Locked {sortingApplied.param == "locked" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("block_index", "number")}>Issuance Block {sortingApplied.param == "block_index" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
+                <th className={styles.tableHeaderElement} onClick={() => handleHeaderElementClick("issuer", "string")}>Asset Owner {sortingApplied.param == "issuer" ? (sortingApplied.type == "asc" ? (<span>&#9650;</span>):(<span>&#9660;</span>)):(null)}</th>
             </tr>
         </thead>
         <tbody>
@@ -396,14 +431,24 @@ function DataTable(stateData, addresses, sortDataAscByKey, sortDataDescByKey, so
                     <tr key={index} className={item.issuances ? (addresses.includes(getLastElement(item.issuances).issuer) ? styles.highlightRow : null) : null}>
 
                         <td className={styles.tableElement}>{item.address}</td>
-                        <td className={styles.tableElement}>{item.asset}</td>
+                        <td className={styles.tableElement}>{item.assetForSorting}<div className={styles.smallLink}><a href={"https://xchain.io/asset/"+item.assetForSorting} target="_blank" rel="noreferrer">View on Xchain</a></div></td>
                         <td className={styles.tableElement}>{item.description}</td>
                         <td className={styles.tableElement}>{item.quantity}</td>
                         <td className={styles.tableElement}>{item.supply}</td>
                         <td className={styles.tableElement}>{item.divisible == 1 ? "true" : "false"}</td>
                         <td className={styles.tableElement}>{item.issuances ? (checkLocked(item.issuances) ? "true" : "false") : "..."}</td>
                         <td className={styles.tableElement}>{item.issuances ? (item.issuances[0].block_index) : "..."}</td>
-                        <td className={styles.tableElement}>{item.issuances ? (getLastElement(item.issuances).issuer) : "..."}</td>
+                        <td className={styles.tableElement}>
+                            {item.issuances ? (
+                                <>
+                                {getLastElement(item.issuances).issuer}
+                                <div className={styles.smallLink}>
+                                    <a href={`https://xchain.io/address/${getLastElement(item.issuances).issuer}`} target="_blank" rel="noreferrer">View on Xchain</a>
+                                </div>
+                                </>
+                            ) : "..."}
+                        </td>
+
                     </tr>
             ))}
         </tbody>
